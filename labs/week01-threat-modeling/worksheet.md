@@ -111,6 +111,8 @@ Answer:
 
 *Deliverable — the top-5 table, plus for the one you implemented:*
 1. the **diff** (commit hash on your `wk01` branch),
+HASH: cfbdd4bc9bc77308e33b386327b93b4302f23b45
+
 2. **evidence it works**: the request that succeeded before your change and is refused after — both outputs,
 Before: a login request with admin' OR '1'='1 succeeded and redirected to /
 After: the same request returned 401 login failed
