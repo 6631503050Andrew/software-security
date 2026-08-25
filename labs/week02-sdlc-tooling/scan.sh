@@ -8,4 +8,4 @@ docker run --rm -v "$PWD/$TARGET:/src" semgrep/semgrep \
 echo
 echo "==> Gitleaks (secret scanning)"
 docker run --rm -v "$PWD/$TARGET:/repo" \
-  zricethezav/gitleaks:latest detect --no-git -s /repo -v || true
+  ghcr.io/gitleaks/gitleaks:latest detect --no-git -s /repo -v || true
