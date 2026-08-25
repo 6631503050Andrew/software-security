@@ -53,18 +53,92 @@ Target under scan: `vulnerable-repo/app.py` (plus `requirements.txt`). It contai
 
 **Task 2 — Secret scan with Gitleaks (15 min)** · *Goal:* find leaked credentials. *Steps:* read the Gitleaks output; identify `AWS_SECRET_ACCESS_KEY` and `DB_PASSWORD` (CWE-798). *Deliverable:* screenshot + the rule that fired for each.
 
-
+![alt text](image-5.png)
 
 **Task 3 — Bug Triage Race (30 min)** · *Goal:* triage accurately. *Steps:* build a table with columns *Tool | File:Line | CWE | Severity | TP/FP | Fix idea*; mark at least 3 true positives and 1 likely false positive and justify each. (Score = TP − misclassified.) *Deliverable:* the completed triage table.
 
-![alt text](image-5.png)
+| Tool | File:Line | CWE | Severity | TP/FP | Fix idea & Justification |
+|---|---|---|---|---|---|
+| Semgrep | `vulnerable-repo/app.py:19` | CWE-89 | High | TP | Use parameterized query `WHERE name = ?`. Real SQL injection because input is string-formatted directly into SQL. |
+| Semgrep | `vulnerable-repo/app.py:26` | CWE-78 | High | TP | Remove `shell=True` and pass list `["ping", "-c", "1", host]`. Real command injection flaw. |
+| Gitleaks | `vulnerable-repo/app.py:11` | CWE-798 | High | TP | Use `os.getenv("AWS_SECRET_ACCESS_KEY")`. Real AWS API key committed to source code. |
+| Semgrep | `vulnerable-repo/app.py:30` | CWE-327 | Medium | TP | Replace MD5 with `bcrypt` or `argon2`. MD5 is weak and easily cracked for passwords. |
+| Semgrep | `vulnerable-repo/app.py:33` | CWE-489 | Medium | FP | Set `debug=False`. False positive because `if __name__ == "__main__":` only runs during local dev testing, not production. |
+
+
 
 **Task 4 — Fuzzing intro (10 min)** · *Goal:* see coverage-guided fuzzing find a bug SAST won't. *Steps:* in the `labs/toolbox` container (Apple clang has no libFuzzer runtime), build `clang -g -fsanitize=address,fuzzer harness.c -o fuzz`, then **seed the corpus** and run it:
 `mkdir -p corpus && printf 'FUZ' > corpus/seed && ./fuzz corpus`. It crashes almost immediately with an AddressSanitizer heap-buffer-overflow at `harness.c:23` (the `data[3]` read with no `size > 3` check). Seeding matters: an unseeded `./fuzz` has to rediscover the magic bytes by chance and often finds nothing for minutes — that unpredictability is itself worth a sentence in your write-up. (The deep fuzzing+exploit lab is Week 11.) *Deliverable:* the ASan crash output (or a screenshot) + a 2-sentence note on why fuzzing finds this bug when a linter/SAST pass over the same 4-line check would not.
 
+![alt text](image-6.png)
+
 **Task 5 — Scan the project target (40 min)** · *Goal:* apply the tools to your term project. *Steps:* run Semgrep + Gitleaks against **NoteVault** (`../../project/starter-app`); also run an SCA scan: `docker run --rm -v "$PWD/../../project/starter-app:/src" aquasec/trivy fs /src`. *Deliverable:* a findings list (tool, file:line/CVE, CWE) — reuse it in your project vuln report.
 
+| Tool | File:Line / Package | Vulnerability / CVE | CWE | Description |
+|---|---|---|---|---|
+| Semgrep | `app.py:184` | Cross-Site Scripting (XSS) | CWE-79 | User input concatenated into `render_template_string()`. |
+| Semgrep | `app.py:205` | OS Command Injection | CWE-78 | `subprocess.run` called with `shell=True` and unvalidated input. |
+| Semgrep | `app.py:207` | Reflected XSS | CWE-79 | Subprocess output returned in raw HTML (`"<pre>%s</pre>"`). |
+| Semgrep | `app.py:212` | Debug & Host Misconfiguration | CWE-489 | Flask app launched with `debug=True` bound to `0.0.0.0`. |
+| Trivy | `requirements.txt` (`urllib3 1.26.4`) | CVE-2021-33503 | CWE-400 | ReDoS in URL authority parsing (High severity). |
+| Trivy | `requirements.txt` (`urllib3 1.26.4`) | CVE-2023-43804 | CWE-200 | Sensitive Cookie header leak on cross-origin redirects (High). |
+| Gitleaks | `starter-app/` | No Leaks Found | N/A | No secrets or API keys found (`0 leaks found`). |
+
+
+
 **Task 6 — Build a security CI gate (25 min)** · *Goal:* automate the scan (previews Week 15). *Steps:* adapt `../week15-devsecops-pipeline/security-ci.yml` into a workflow that runs Semgrep + Trivy + Gitleaks and **fails on HIGH/CRITICAL**; run it locally (`act`) or commit to your fork and read the Actions log. *Deliverable:* the workflow file + a screenshot of a failing run.
+
+**Workflow file (`.github/workflows/security-ci.yml`):**
+```yaml
+name: security-ci
+
+on:
+  push:
+    branches: [ main, wk02 ]
+  pull_request:
+    branches: [ main, wk02 ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  sast:
+    name: SAST (Semgrep)
+    runs-on: ubuntu-latest
+    container: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Semgrep
+        run: semgrep ci --config p/default --config p/owasp-top-ten
+
+  secrets:
+    name: Secret scanning (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v3.0.0
+        env:
+          GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sca:
+    name: SCA + image scan (Trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy filesystem scan (deps + misconfig)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+```
 
 **Task 7 — SAST blind spots (20 min)** · *Goal:* see what scanners miss. *Steps:* find one real bug in `vulnerable-repo/app.py` (or NoteVault) that Semgrep did **not** flag, and explain why a pattern-based tool missed it. *Deliverable:* the bug + a 2-sentence explanation.
 

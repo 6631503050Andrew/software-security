@@ -14,8 +14,9 @@ name: security-ci
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, wk02 ]
   pull_request:
+    branches: [ main, wk02 ]
   workflow_dispatch:
 
 permissions:
