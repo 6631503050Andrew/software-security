@@ -49,6 +49,7 @@ Targets: `vulnerable_crypto.py` (the misuses), `hashes.txt` (four unsalted MD5s)
 **Task 1 — Capture the Hash (30 min)** · *Goal:* recover the passwords. *Steps:* strip the comment lines from `hashes.txt`, then run `hashcat -m 0 hashes.txt rockyou.txt` (or the `john --format=raw-md5` equivalent); recover all four plaintexts. *Deliverable:* screenshot of the cracked results (mask any real-looking value). Note in one line why unsalted MD5 fell so fast (CWE-916/327).
 
 ![alt text](image-1.png)
+Note: Unsalted MD5 fell in milliseconds because MD5 is computationally fast for GPUs and without a salt, identical passwords have fixed precomputed hashes (CWE-916/327).
 ```sim
 aes-modes
 ```
@@ -81,6 +82,17 @@ CWE-327: Use of a Broken or Risky Cryptographic Algorithm (Unsalted MD5)
 
 **Task 6 — Password storage migration (25 min)** · *Goal:* fix it the way real apps do. *Steps:* write `store_password`/`verify_password` with **argon2id**, and a **rehash-on-login** path that upgrades a legacy MD5 record to argon2id the next time the user logs in. *Deliverable:* the code + a short note on why migration matters.
 
+```python
+# Rehash-on-login migration logic (Argon2id)
+def login_and_migrate(username, password, users_db):
+    stored_hash = users_db.get(username)
+    if not stored_hash.startswith("$argon2id$"):
+        if hashlib.md5(password.encode()).hexdigest() == stored_hash:
+            users_db[username] = ph.hash(password)  # Transparent upgrade
+            return True
+        return False
+    return ph.verify(stored_hash, password)
+```
 = Cryptographic hashes are one-way functions, meaning a database administrator cannot simply take stored MD5 hashes and re-hash them into Argon2id offline without knowing the original plaintext passwords. Rehash-on-login allows an application to smoothly migrate users to secure Argon2id hashes over time whenever they authenticate, avoiding the disruption of invalidating all user accounts or forcing a global password reset.
 
 **Task 7 — Authenticated encryption round-trip (20 min)** · *Goal:* use AEAD correctly. *Steps:* encrypt+decrypt a message with **AES-GCM** using a random 12-byte nonce and a key from an env var; then flip one ciphertext byte and show decryption **fails** (tag check). *Deliverable:* the round-trip output + the tampered-fails proof.
@@ -104,6 +116,8 @@ notBefore=Jul 29 22:10:08 2026 GMT
 notAfter=Oct 27 22:17:21 2026 GMT
 New, TLSv1.3, Cipher is TLS_AES_256_GCM_SHA384
 
+TLS protects data in transit across the network against active eavesdropping and tampering (MitM attacks), whereas password hashing and at-rest encryption only protect static data stored on disk or in database tables.
+
 
 **Task 9 — Defend / fix it (20 min)** · *Goal:* remediate using `solution_skeleton.py`. *Steps:* run `python solution_skeleton.py`; confirm `store_password`/`verify_password` use argon2id (auto-salted), `encrypt_gcm` uses a random 12-byte nonce + auth tag with a key from `ENC_KEY_HEX` env, and `reset_token` uses `secrets`. Map each fix to the CWE it closes. *Deliverable:* before/after table (misuse → fix → CWE closed) + screenshot of the fixed script running.
 
@@ -113,6 +127,13 @@ New, TLSv1.3, Cipher is TLS_AES_256_GCM_SHA384
 | **ECB Mode:** AES-ECB (`AES.MODE_ECB`) leaking plaintext structure | Replaced with **AES-GCM** (`AES.MODE_GCM`), using a random 12-byte nonce (`os.urandom(12)`) and authentication tag (`encrypt_and_digest`). | **CWE-327** (Broken Cryptographic Mode) |
 | **Predictable Token:** 6-digit `random.choice` non-CSPRNG | Replaced with cryptographically secure `secrets.token_urlsafe(16)` with 128+ bits of entropy. | **CWE-330** (Use of Insufficiently Random Values) |
 | **Hardcoded Key:** Secret key hardcoded in source code (`b"0123456789..."`) | Key loaded dynamically at runtime from environment variable (`os.environ.get("ENC_KEY_HEX")`). | **CWE-798** (Use of Hard-coded Credentials) |
+
+```text
+# Fixed script running (python solution_skeleton.py):
+argon2 ok: True
+gcm: (b'\xb9\xc0F\x8b-\x93\xdf\xfa\x1a\xd2\xc3\x07', b'\xa5\x12\xc0L\x85\xb5', b'\xcf\xd9Lr\xee\xc9\xfb\x13\x0e\xec>Pv\xb8H%')
+token: ZD-KnE9yPW2ujNO-kedMaA
+```
 
 
 ## Part 4 — Reflection
@@ -152,7 +173,9 @@ Why: If the database gets leaked, weak password hashes can be cracked and reused
   *Flags are unique per student — submitting another student's flag is a violation. How to submit: **learn.zcr.ai/submit** (full guide: `SUBMISSION.md` in the repo root).*
 - **Explain in your own words** *(graded on your reasoning, not copied text):*
   1. What did you do, and **why did the vulnerability work**?
+     = I identified and cracked weak MD5 hashes, observed repeated AES-ECB ciphertext blocks, predicted 6-digit `random` reset tokens, and found hardcoded secret keys. The vulnerabilities worked because MD5 lacks salt and memory cost, ECB mode encrypts identical blocks independently without an IV, `random` uses a non-cryptographic PRNG, and hardcoded keys expose secrets in source code.
   2. **Why does your fix actually stop it** — and what could still break it?
+     = Argon2id adds per-password salts and memory/time costs to stop fast GPU cracking, AES-GCM uses random nonces and auth tags to prevent pattern leaking and tampering, `secrets` provides CSPRNG unpredictability, and environment variables remove keys from source. A misconfigured low Argon2id memory cost parameter, nonce reuse in AES-GCM, or compromised environment variables could still weaken security.
 
 ---
 
