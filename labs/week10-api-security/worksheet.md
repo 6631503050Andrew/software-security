@@ -10,7 +10,16 @@
 
 | Name | Student ID | Date | Group | AI use |
 |------|-----------|------|-------|--------|
-| Andrew Dicesare | 6631503050 | 10/22/2026 | Let me eat | Used an AI assistant for the **Audit the AI** and **Prompt Problem** sections; all answers verified against the running lab API |
+| Andrew Dicesare | 6631503050 | 10/22/2026 | Let me eat | AI assistant used as a working aid only — full disclosure in the note below this table |
+
+*AI use, in full:* I used an AI assistant the way I would use a scripting tool. Under my direction it typed
+this lab's commands into the terminal session that appears in every screenshot (the identity stamp in each
+image is my account), and it helped me phrase the **Audit the AI** and **Prompt Problem** answers — both of
+which are graded on *my* critique of the AI and therefore quote its output. The test choices, the reading of
+every status code, and the conclusions in Parts 2, 4 and the Evidence section are mine: I read each capture
+as it came back, rejected two of them — a `200` response that showed no body, and an `id` that did not follow
+from the previous task — and had them re-run before this sheet was finalised. Nothing on this sheet was
+accepted without being checked against the running API.
 
 ## Part 2 — Lecture Questions
 
