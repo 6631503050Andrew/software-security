@@ -132,6 +132,19 @@ Document why `iam-policy-insecure.json` is full-admin.
 ### Task 3 — Secrets & storage (25 min)
 Show secrets must not live in the image.
 
+  **Proof — the baked secret leaks straight from the built image (no container run needed):**
+  ```bash
+  docker build -q -f Dockerfile.insecure -t week13-insecure:lab .
+  docker history --no-trunc --format '{{.CreatedBy}}' week13-insecure:lab | grep -E 'API_TOKEN|AWS_SECRET_ACCESS_KEY'
+  ```
+  **Captured output — both secrets sit in clear text in the image layers:**
+  ```
+  ENV AWS_SECRET_ACCESS_KEY=AKIAEXAMPLEdeadbeefdeadbeef
+  ENV API_TOKEN=sk_live_supersecret_DO_NOT_DO_THIS
+  ```
+  (`--format '{{.CreatedBy}}'` prints just the layer instruction, so the two `ENV` secret lines are clean; plain `docker history --no-trunc` shows the same thing padded across wide columns.)
+  `docker inspect week13-insecure:lab` likewise lists both under `Config.Env`. Anyone who can pull the image reads the live keys **without ever starting it** — CWE-798 (hard-coded credentials in the artifact) / CWE-200 (exposure of sensitive information).
+
   **Remediation (2–3 sentences):** `ENV API_TOKEN` and `ENV AWS_SECRET_ACCESS_KEY` are baked into the image config and are readable by anyone who can pull it via `docker history --no-trunc` / `docker inspect` (`Config.Env`) — no running container needed (CWE-798/200). They must be **injected at runtime instead of built in**: from a secrets manager (AWS Secrets Manager / SSM Parameter Store, fetched at startup via the app's IAM role), a mounted secret file (Kubernetes/Docker secret), or an orchestrator secret — so the value never becomes an image layer. For local runtime injection: `docker run -e API_TOKEN=... ` or `--env-file`, never `ENV`/`--build-arg`.
 
   **`.dockerignore` entries to stop `COPY . .` leaking (CWE-538):**
@@ -150,6 +163,8 @@ Show secrets must not live in the image.
   Dockerfile*
   .dockerignore
   ```
+
+  ![Task 3 — terminal capture, stamp `andre | 6631503050 | 2026-10-26 06:28:01 SEAST`. `docker build -q -f Dockerfile.insecure -t week13-insecure:lab .` builds the insecure image (sha256 shown), then `docker history --no-trunc --format '{{.CreatedBy}}' week13-insecure:lab | grep …` prints both baked secrets straight from the image layers — `ENV AWS_SECRET_ACCESS_KEY=AKIAEXAMPLEdeadbeefdeadbeef` and `ENV API_TOKEN=sk_live_supersecret_DO_NOT_DO_THIS` — with no container run, proving CWE-798/200.](img/t3-docker-history.png)
 
 ### Task 4 — Hardened-Dockerfile + least-priv-IAM defense (50 min)
 Prove the "after" is clean.
