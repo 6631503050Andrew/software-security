@@ -61,7 +61,7 @@ Answer in your own words (2–4 sentences each).
 > **Where each half runs:** the **local services** (Tasks 0, 1, 1b) run from the course lab folder
 > (`labs/week15-devsecops-pipeline/`). The **CI gate** (Tasks 2–5) runs in my standalone repo
 > **[`6631503050Andrew/devsecops-week15`](https://github.com/6631503050Andrew/devsecops-week15)** with the
-> lab files at the root. Each 📸 marker is a stamped screenshot to take.
+> lab files at the root. Each task below embeds its identity-stamped screenshot as evidence.
 
 ![Two panels: the CI gate in security-ci.yml, where a MEDIUM DS-0001 finding slips past the HIGH,CRITICAL threshold and the build goes green, and the /admin handler, where one except branch returns 200 with the flag while the other returns 403 and logs it.](img/fail-closed.svg)
 
@@ -83,12 +83,12 @@ Run the sample service; trigger the three curls.
   … logger=security event=authz_failure outcome=deny subject=bob src_ip=127.0.0.1 reason=not_admin
   … logger=security event=authz_success outcome=allow subject=alice src_ip=127.0.0.1
   ```
-  > 📸 **SCREENSHOT → `img/t0-logs.png`** *(not yet captured)* — stamped terminal showing the three `event=…` security log lines (authn_failure, authz_failure, authz_success).
+  ![Task 0 — three security log lines (authn_failure, authz_failure, authz_success) in a stamped terminal](img/t0-logs.png)
 
 ### Task 1 — Logging & fail-closed (35 min, A09/A10)
   **Fail-closed explanation (2–3 sentences):** In `sample-service.py`, `/admin` wraps the auth check in `try/except`, and the `except Exception as exc:` branch **returns 403, never the secret** — so if any unexpected error occurs (a malformed header, a bug), access is **denied by default** (fail-closed, A10/CWE-636). It logs `error=type(exc).__name__` (the exception *class*, e.g. `KeyError`) rather than the exception message, so an internal detail/stack trace never leaks to the client (**CWE-209**). The line that would make it fail **open** is the commented INSECURE variant — `except Exception: return jsonify(secret="the cake is a lie")` — which grants access on error instead of denying.
 
-  > 📸 **SCREENSHOT → `img/t1-failclosed.png`** *(not yet captured)* — stamped terminal showing the `/admin` fail-closed `403` + its `event=authz_*` log line (can reuse the Task 0 capture if it shows both).
+  ![Task 1 — fail-closed /admin deny recorded as event=authz_failure / outcome=deny (shares the Task 0 capture)](img/t0-logs.png)
 
 ### Task 1b — Break the Build, live (25 min, A10 / CWE-636)
 Exploit the real fail-open, then prove the fix.
@@ -110,7 +110,7 @@ Exploit the real fail-open, then prove the fix.
 
   **Flag:** the local service leaks the **demo** flag `FLAG{devsecops_fail_open_leaks_admin}` (same for everyone). My **graded** flag, from the **Break the Build challenge on `ctf.zcr.ai`**, is recorded on the Personalized-flag line below.
 
-  > 📸 **SCREENSHOT → `img/t1b-failopen.png`** *(not yet captured)* — stamped terminal showing the `:8090` leak vs the `:8091` deny.
+  ![Task 1b — :8090 fail-open leaks the panel+flag vs :8091 fail-closed 403, stamped terminal](img/t1b-failopen.png)
 
 ### Task 2 — Stand up the gate (35 min)
 Get the workflow running.
@@ -123,7 +123,7 @@ Get the workflow running.
   ```
   **Result:** the `security-ci` workflow runs the three jobs — **`semgrep` (SAST)**, **`trivy` (SCA + IaC)**, **`gitleaks` (secrets)** — and each tool's report step uploads **SARIF to the repo's Security tab** (Code scanning alerts). Repo: `6631503050Andrew/devsecops-week15`.
 
-  > 📸 **SCREENSHOT → `img/t2-actions.png`** *(not yet captured)* — stamped terminal beside the **Actions run** (3 jobs) and the **Security → Code scanning alerts** page.
+  ![Task 2 — security-ci Actions run with all three jobs (semgrep/trivy/gitleaks), stamped terminal](img/t2-actions.png)
 
 ### Task 3 — Blue team: pass the gate (30 min)
 A green build.
@@ -133,7 +133,7 @@ A green build.
 
   **Passing run:** `https://github.com/6631503050Andrew/devsecops-week15/actions` (the green `security-ci` run on `main`).
 
-  > 📸 **SCREENSHOT → `img/t3-greenbuild.png`** *(not yet captured)* — stamped terminal beside the **passing** `security-ci` run (all three jobs green).
+  ![Task 3 — passing security-ci run, semgrep ✓ / trivy ✓ / gitleaks ✓ (shares the Task 2 capture)](img/t2-actions.png)
 
 ### Task 4 — Red team: Break the Build (40 min)
 Make the gate say **no** — one planted defect per PR, each caught by a different job.
@@ -146,7 +146,7 @@ Make the gate say **no** — one planted defect per PR, each caught by a differe
 
   Each PR turns its gate red, and the **intended** job catches each defect (verified on the real runs: Trivy SCA flagged `urllib3`, Trivy config flagged the root Dockerfile as `DS-0002` HIGH, Gitleaks flagged `config.py`'s `INTERNAL_API_KEY`). **Overlapping coverage (defense in depth):** PR #2's missing `USER` is *also* caught by **Semgrep** (`dockerfile.security.missing-user`) — two scanners, same defect — which is a feature, not a bug. (Per README §5: **not** `chmod 777` or `:latest` — those are MEDIUM/none and slip a `HIGH,CRITICAL` gate; root is `DS-0002` HIGH and fails for real.)
 
-  > 📸 **SCREENSHOT → `img/t4-failinggate.png`** *(not yet captured)* — stamped terminal beside a **failing** PR check (e.g. PR #1) showing the red gate step and which job caught it.
+  ![Task 4 — PR #1 red gate: Trivy SCA fails on requirements.txt (8 vulns from urllib3), stamped terminal](img/t4-failinggate.png)
 
 ### Task 5 — Score Break-the-Build (25 min)
   **Scoreboard:** **Blue 3 – Red 0.** Each of the three planted defects was caught by its gate (urllib3 → Trivy SCA; root Dockerfile → Trivy config DS-0002; hard-coded key → Gitleaks); none slipped through, so Red scored no bypass points.
